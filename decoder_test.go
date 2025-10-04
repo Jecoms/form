@@ -2024,7 +2024,9 @@ func BenchmarkIssue71Nested100(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		var req FormRequest
-		decoder.Decode(&req, urlValues)
+		if err := decoder.Decode(&req, urlValues); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -2053,6 +2055,8 @@ func BenchmarkIssue71Nested1000(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		var req FormRequest
-		decoder.Decode(&req, urlValues)
+		if err := decoder.Decode(&req, urlValues); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

@@ -47,12 +47,13 @@ func (d *decoder) parseMapData() {
 
 	d.maxKeyLen = 0
 	d.dm = d.dm[0:0]
-	if d.aliasMap == nil {
-		d.aliasMap = make(map[string]*recursiveData)
-	} else {
+	
+	if d.aliasMap != nil {
 		for k := range d.aliasMap {
 			delete(d.aliasMap, k)
 		}
+	} else {
+		d.aliasMap = make(map[string]*recursiveData)
 	}
 
 	var i int
