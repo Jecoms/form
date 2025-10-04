@@ -440,10 +440,13 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 				varr = v
 			}
 
+			// Cache element type to avoid repeated Type().Elem() calls
+			elemType := varr.Type().Elem()
+
 			for i := 0; i < len(rd.keys); i++ {
 
 				kv = rd.keys[i]
-				newVal := reflect.New(varr.Type().Elem()).Elem()
+				newVal := reflect.New(elemType).Elem()
 
 				if kv.ivalue == -1 {
 					d.setError(namespace, fmt.Errorf("invalid slice index '%s'", kv.value))
@@ -512,12 +515,15 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 			varr = reflect.Indirect(reflect.New(reflect.ArrayOf(v.Len(), v.Type().Elem())))
 			reflect.Copy(varr, v)
 
+			// Cache element type to avoid repeated Type().Elem() calls
+			elemType := varr.Type().Elem()
+
 			for i := 0; i < len(rd.keys); i++ {
 				kv = rd.keys[i]
 				if kv.ivalue >= v.Len() {
 					continue
 				}
-				newVal := reflect.New(varr.Type().Elem()).Elem()
+				newVal := reflect.New(elemType).Elem()
 
 				if kv.ivalue == -1 {
 					d.setError(namespace, fmt.Errorf("invalid array index '%s'", kv.value))
@@ -564,9 +570,13 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 			mp = v
 		}
 
+		// Cache element and key types to avoid repeated Type() calls
+		elemType := typ.Elem()
+		keyType := typ.Key()
+
 		for i := 0; i < len(rd.keys); i++ {
-			newVal := reflect.New(typ.Elem()).Elem()
-			mk = reflect.New(typ.Key()).Elem()
+			newVal := reflect.New(elemType).Elem()
+			mk = reflect.New(keyType).Elem()
 			kv = rd.keys[i]
 
 			if err := d.getMapKey(kv.value, mk, namespace); err != nil {
