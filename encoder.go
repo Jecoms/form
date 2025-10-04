@@ -68,6 +68,23 @@ func (e *encoder) traverseStruct(v reflect.Value, namespace []byte, idx int) {
 	}
 }
 
+// formatPrimitiveValue formats primitive types (uint, int, float, bool) as strings
+func (e *encoder) formatPrimitiveValue(v reflect.Value, kind reflect.Kind) string {
+	switch kind {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return strconv.FormatUint(v.Uint(), 10)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(v.Int(), 10)
+	case reflect.Float32:
+		return strconv.FormatFloat(v.Float(), 'f', -1, 32)
+	case reflect.Float64:
+		return strconv.FormatFloat(v.Float(), 'f', -1, 64)
+	case reflect.Bool:
+		return strconv.FormatBool(v.Bool())
+	}
+	return ""
+}
+
 func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx int, isOmitEmpty bool) {
 
 	if idx > -1 && current.Kind() == reflect.Ptr {
@@ -108,28 +125,12 @@ func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		return
 
 	case reflect.String:
-
 		e.setVal(namespace, idx, v.String())
 
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-
-		e.setVal(namespace, idx, strconv.FormatUint(v.Uint(), 10))
-
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-
-		e.setVal(namespace, idx, strconv.FormatInt(v.Int(), 10))
-
-	case reflect.Float32:
-
-		e.setVal(namespace, idx, strconv.FormatFloat(v.Float(), 'f', -1, 32))
-
-	case reflect.Float64:
-
-		e.setVal(namespace, idx, strconv.FormatFloat(v.Float(), 'f', -1, 64))
-
-	case reflect.Bool:
-
-		e.setVal(namespace, idx, strconv.FormatBool(v.Bool()))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Float32, reflect.Float64, reflect.Bool:
+		e.setVal(namespace, idx, e.formatPrimitiveValue(v, kind))
 
 	case reflect.Slice, reflect.Array:
 
@@ -239,20 +240,10 @@ func (e *encoder) getMapKey(key reflect.Value, namespace []byte) (string, bool) 
 	case reflect.String:
 		return v.String(), true
 
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return strconv.FormatUint(v.Uint(), 10), true
-
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return strconv.FormatInt(v.Int(), 10), true
-
-	case reflect.Float32:
-		return strconv.FormatFloat(v.Float(), 'f', -1, 32), true
-
-	case reflect.Float64:
-		return strconv.FormatFloat(v.Float(), 'f', -1, 64), true
-
-	case reflect.Bool:
-		return strconv.FormatBool(v.Bool()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Float32, reflect.Float64, reflect.Bool:
+		return e.formatPrimitiveValue(v, kind), true
 
 	default:
 		e.setError(namespace, fmt.Errorf("Unsupported Map Key '%v' Namespace '%s'", v.String(), namespace))

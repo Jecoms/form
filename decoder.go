@@ -540,6 +540,35 @@ func (d *decoder) setMap(v reflect.Value, rd *recursiveData, namespace []byte) (
 	return
 }
 
+// setStructField handles decoding of struct types
+func (d *decoder) setStructField(v reflect.Value, typ reflect.Type, arr []string, idx int, namespace []byte, ok bool) (set bool) {
+	// if we get here then no custom time function declared so use RFC3339 by default
+	if typ == timeType {
+		if !ok || len(arr[idx]) == 0 {
+			return
+		}
+
+		t, err := time.Parse(time.RFC3339, arr[idx])
+		if err != nil {
+			d.setError(namespace, err)
+		}
+
+		v.Set(reflect.ValueOf(t))
+		set = true
+		return
+	}
+
+	d.parseMapData()
+
+	// we must be recursing infinitly...but that's ok we caught it on the very first overun.
+	if len(namespace) > d.maxKeyLen {
+		return
+	}
+
+	set = d.traverseStruct(v, typ, namespace)
+	return
+}
+
 func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx int) (set bool) {
 
 	var err error
@@ -629,33 +658,7 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		}
 
 	case reflect.Struct:
-		typ := v.Type()
-
-		// if we get here then no custom time function declared so use RFC3339 by default
-		if typ == timeType {
-
-			if !ok || len(arr[idx]) == 0 {
-				return
-			}
-
-			t, err := time.Parse(time.RFC3339, arr[idx])
-			if err != nil {
-				d.setError(namespace, err)
-			}
-
-			v.Set(reflect.ValueOf(t))
-			set = true
-			return
-		}
-
-		d.parseMapData()
-
-		// we must be recursing infinitly...but that's ok we caught it on the very first overun.
-		if len(namespace) > d.maxKeyLen {
-			return
-		}
-
-		set = d.traverseStruct(v, typ, namespace)
+		set = d.setStructField(v, v.Type(), arr, idx, namespace, ok)
 	}
 	return
 }
