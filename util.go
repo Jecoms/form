@@ -3,7 +3,15 @@ package form
 import (
 	"reflect"
 	"strconv"
+	"unsafe"
 )
+
+// bytesToString converts []byte to string without allocation.
+// WARNING: The returned string must not be used after the []byte is modified!
+// This is safe for map lookups where we immediately use the result.
+func bytesToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
 
 // ExtractType gets the actual underlying type of field value.
 // it is exposed for use within you Custom Functions

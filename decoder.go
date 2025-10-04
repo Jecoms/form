@@ -189,7 +189,8 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 	var err error
 	v, kind := ExtractType(current)
 
-	arr, ok := d.values[string(namespace)]
+	// Use zero-allocation conversion for map lookup
+	arr, ok := d.values[bytesToString(namespace)]
 
 	if d.d.customTypeFuncs != nil {
 
@@ -399,7 +400,7 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		}
 
 		// maybe it's an numbered array i.e. Phone[0].Number
-		if rd := d.findAlias(string(namespace)); rd != nil {
+		if rd := d.findAlias(bytesToString(namespace)); rd != nil {
 
 			var varr reflect.Value
 			var kv key
@@ -494,7 +495,7 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		}
 
 		// maybe it's an numbered array i.e. Phone[0].Number
-		if rd := d.findAlias(string(namespace)); rd != nil {
+		if rd := d.findAlias(bytesToString(namespace)); rd != nil {
 			var varr reflect.Value
 			var kv key
 
@@ -537,7 +538,7 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		d.parseMapData()
 
 		// no natural map support so skip directly to dm lookup
-		if rd = d.findAlias(string(namespace)); rd == nil {
+		if rd = d.findAlias(bytesToString(namespace)); rd == nil {
 			return
 		}
 
