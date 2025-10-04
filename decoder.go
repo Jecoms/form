@@ -429,6 +429,44 @@ func (d *decoder) setArrayWithIndexes(v reflect.Value, rd *recursiveData, namesp
 	return
 }
 
+// setMap handles decoding of map types
+func (d *decoder) setMap(v reflect.Value, rd *recursiveData, namespace []byte) (set bool) {
+	var existing bool
+	var kv key
+	var mp reflect.Value
+	var mk reflect.Value
+
+	typ := v.Type()
+
+	if v.IsNil() {
+		mp = reflect.MakeMap(typ)
+	} else {
+		existing = true
+		mp = v
+	}
+
+	for i := 0; i < len(rd.keys); i++ {
+		newVal := reflect.New(typ.Elem()).Elem()
+		mk = reflect.New(typ.Key()).Elem()
+		kv = rd.keys[i]
+
+		if err := d.getMapKey(kv.value, mk, namespace); err != nil {
+			d.setError(namespace, err)
+			continue
+		}
+
+		if d.setFieldByType(newVal, append(namespace, kv.searchValue...), 0) {
+			set = true
+			mp.SetMapIndex(mk, newVal)
+		}
+	}
+
+	if set && !existing {
+		v.Set(mp)
+	}
+	return
+}
+
 func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx int) (set bool) {
 
 	var err error
@@ -610,50 +648,11 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		}
 
 	case reflect.Map:
-		var rd *recursiveData
-
 		d.parseMapData()
-
 		// no natural map support so skip directly to dm lookup
-		if rd = d.findAlias(ns); rd == nil {
-			return
+		if rd := d.findAlias(ns); rd != nil {
+			set = d.setMap(v, rd, namespace)
 		}
-
-		var existing bool
-		var kv key
-		var mp reflect.Value
-		var mk reflect.Value
-
-		typ := v.Type()
-
-		if v.IsNil() {
-			mp = reflect.MakeMap(typ)
-		} else {
-			existing = true
-			mp = v
-		}
-
-		for i := 0; i < len(rd.keys); i++ {
-			newVal := reflect.New(typ.Elem()).Elem()
-			mk = reflect.New(typ.Key()).Elem()
-			kv = rd.keys[i]
-
-			if err := d.getMapKey(kv.value, mk, namespace); err != nil {
-				d.setError(namespace, err)
-				continue
-			}
-
-			if d.setFieldByType(newVal, append(namespace, kv.searchValue...), 0) {
-				set = true
-				mp.SetMapIndex(mk, newVal)
-			}
-		}
-
-		if !set || existing {
-			return
-		}
-
-		v.Set(mp)
 
 	case reflect.Struct:
 		typ := v.Type()
