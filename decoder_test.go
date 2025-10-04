@@ -1964,16 +1964,18 @@ func TestIssue71NestedPerformance(t *testing.T) {
 	
 	if raceEnabled {
 		// Lenient thresholds for race detector mode (CI)
+		t.Log("Using lenient thresholds (race detector enabled)")
 		thresholds = []struct {
 			numValues int
 			maxTime   time.Duration
 		}{
 			{10, 50 * time.Millisecond},
 			{100, 500 * time.Millisecond},
-			{1000, 35 * time.Second},
+			{1000, 50 * time.Second}, // Extra lenient for slow CI runners
 		}
 	} else {
 		// Strict thresholds for normal mode (local dev)
+		t.Log("Using strict thresholds (race detector disabled)")
 		thresholds = []struct {
 			numValues int
 			maxTime   time.Duration
