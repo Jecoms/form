@@ -1957,6 +1957,8 @@ func TestIssue71NestedPerformance(t *testing.T) {
 
 	// Adjust thresholds based on race detector
 	// Race detector adds 5-10x overhead, especially on older Go versions
+	// Using smaller counts (10, 50, 200) since we know the bug scales exponentially.
+	// Without the fix, even 200 values would take 10+ seconds.
 	var thresholds []struct {
 		numValues int
 		maxTime   time.Duration
@@ -1970,8 +1972,8 @@ func TestIssue71NestedPerformance(t *testing.T) {
 			maxTime   time.Duration
 		}{
 			{10, 50 * time.Millisecond},
-			{100, 500 * time.Millisecond},
-			{1000, 50 * time.Second}, // Extra lenient for slow CI runners
+			{50, 500 * time.Millisecond},  // Without fix: ~5s, with fix: ~50-100ms
+			{200, 5 * time.Second},        // Without fix: ~80s+, with fix: ~500ms-2s
 		}
 	} else {
 		// Strict thresholds for normal mode (local dev)
@@ -1981,8 +1983,8 @@ func TestIssue71NestedPerformance(t *testing.T) {
 			maxTime   time.Duration
 		}{
 			{10, 10 * time.Millisecond},
-			{100, 100 * time.Millisecond},
-			{1000, 10 * time.Second},
+			{50, 50 * time.Millisecond},   // Without fix: ~1s, with fix: ~5-10ms
+			{200, 500 * time.Millisecond}, // Without fix: ~16s, with fix: ~50-100ms
 		}
 	}
 
