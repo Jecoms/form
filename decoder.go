@@ -273,6 +273,43 @@ func (d *decoder) parseAndSetBoolKey(v reflect.Value, key string, ns string) err
 	return nil
 }
 
+// setPrimitiveValue handles setting primitive types (uint, int, float, bool)
+func (d *decoder) setPrimitiveValue(v reflect.Value, arr []string, idx int, kind reflect.Kind, namespace []byte, ns string) (set bool, err error) {
+	if idx >= len(arr) {
+		return false, nil
+	}
+
+	switch kind {
+	case reflect.Uint, reflect.Uint64:
+		err = d.parseAndSetUint(v, arr[idx], 64, namespace, ns)
+	case reflect.Uint8:
+		err = d.parseAndSetUint(v, arr[idx], 8, namespace, ns)
+	case reflect.Uint16:
+		err = d.parseAndSetUint(v, arr[idx], 16, namespace, ns)
+	case reflect.Uint32:
+		err = d.parseAndSetUint(v, arr[idx], 32, namespace, ns)
+	case reflect.Int, reflect.Int64:
+		err = d.parseAndSetInt(v, arr[idx], 64, namespace, ns)
+	case reflect.Int8:
+		err = d.parseAndSetInt(v, arr[idx], 8, namespace, ns)
+	case reflect.Int16:
+		err = d.parseAndSetInt(v, arr[idx], 16, namespace, ns)
+	case reflect.Int32:
+		err = d.parseAndSetInt(v, arr[idx], 32, namespace, ns)
+	case reflect.Float32:
+		err = d.parseAndSetFloat(v, arr[idx], 32, namespace, ns)
+	case reflect.Float64:
+		err = d.parseAndSetFloat(v, arr[idx], 64, namespace, ns)
+	case reflect.Bool:
+		err = d.parseAndSetBool(v, arr[idx], namespace, ns)
+	}
+
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // setSlice handles decoding of slice types
 func (d *decoder) setSlice(v reflect.Value, arr []string, namespace []byte, ns string) (set bool) {
 	// slice elements could be mixed eg. number and non-numbers Value[0]=[]string{"10"} and Value=[]string{"10","20"}
@@ -513,115 +550,16 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		v.SetString(arr[idx])
 		set = true
 
-	case reflect.Uint, reflect.Uint64:
-		if !ok || idx == len(arr) {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Float32, reflect.Float64, reflect.Bool:
+		if !ok {
 			return
 		}
-		if err = d.parseAndSetUint(v, arr[idx], 64, namespace, ns); err != nil {
+		if set, err = d.setPrimitiveValue(v, arr, idx, kind, namespace, ns); err != nil {
 			d.setError(namespace, err)
 			return
 		}
-		set = true
-
-	case reflect.Uint8:
-		if !ok || idx == len(arr) {
-			return
-		}
-		if err = d.parseAndSetUint(v, arr[idx], 8, namespace, ns); err != nil {
-			d.setError(namespace, err)
-			return
-		}
-		set = true
-
-	case reflect.Uint16:
-		if !ok || idx == len(arr) {
-			return
-		}
-		if err = d.parseAndSetUint(v, arr[idx], 16, namespace, ns); err != nil {
-			d.setError(namespace, err)
-			return
-		}
-		set = true
-
-	case reflect.Uint32:
-		if !ok || idx == len(arr) {
-			return
-		}
-		if err = d.parseAndSetUint(v, arr[idx], 32, namespace, ns); err != nil {
-			d.setError(namespace, err)
-			return
-		}
-		set = true
-
-	case reflect.Int, reflect.Int64:
-		if !ok || idx == len(arr) {
-			return
-		}
-		if err = d.parseAndSetInt(v, arr[idx], 64, namespace, ns); err != nil {
-			d.setError(namespace, err)
-			return
-		}
-		set = true
-
-	case reflect.Int8:
-		if !ok || idx == len(arr) {
-			return
-		}
-		if err = d.parseAndSetInt(v, arr[idx], 8, namespace, ns); err != nil {
-			d.setError(namespace, err)
-			return
-		}
-		set = true
-
-	case reflect.Int16:
-		if !ok || idx == len(arr) {
-			return
-		}
-		if err = d.parseAndSetInt(v, arr[idx], 16, namespace, ns); err != nil {
-			d.setError(namespace, err)
-			return
-		}
-		set = true
-
-	case reflect.Int32:
-		if !ok || idx == len(arr) {
-			return
-		}
-		if err = d.parseAndSetInt(v, arr[idx], 32, namespace, ns); err != nil {
-			d.setError(namespace, err)
-			return
-		}
-		set = true
-
-	case reflect.Float32:
-		if !ok || idx == len(arr) {
-			return
-		}
-		if err = d.parseAndSetFloat(v, arr[idx], 32, namespace, ns); err != nil {
-			d.setError(namespace, err)
-			return
-		}
-		set = true
-
-	case reflect.Float64:
-		if !ok || idx == len(arr) {
-			return
-		}
-		if err = d.parseAndSetFloat(v, arr[idx], 64, namespace, ns); err != nil {
-			d.setError(namespace, err)
-			return
-		}
-		set = true
-
-	case reflect.Bool:
-		if !ok || idx == len(arr) {
-			return
-		}
-		if err = d.parseAndSetBool(v, arr[idx], namespace, ns); err != nil {
-			d.setError(namespace, err)
-			return
-		}
-		set = true
 
 	case reflect.Slice:
 		d.parseMapData()
