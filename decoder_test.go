@@ -1936,3 +1936,123 @@ func TestDecoder_InvalidSliceIndex(t *testing.T) {
 	Equal(t, v2.PostIds[0], "1")
 	Equal(t, v2.PostIds[1], "2")
 }
+
+// Issue #71: Nested structure decoding performance
+// https://github.com/go-playground/form/issues/71
+func TestIssue71NestedPerformance(t *testing.T) {
+	type NestedBar struct {
+		Bazs   []string          `form:"bazs"`
+		Lookup map[string]string `form:"lookup"`
+	}
+
+	type NestedFoo struct {
+		Bars []*NestedBar `form:"bars"`
+	}
+
+	type FormRequest struct {
+		Foos []*NestedFoo `form:"foos"`
+	}
+
+	decoder := NewDecoder()
+
+	tests := []struct {
+		numValues int
+		maxTime   time.Duration
+	}{
+		{10, 10 * time.Millisecond},
+		{100, 100 * time.Millisecond},
+		{1000, 10 * time.Second},
+	}
+
+	for _, tt := range tests {
+		urlValues := make(url.Values)
+
+		// Generate test data with nested structure
+		for i := 0; i < tt.numValues; i++ {
+			urlValues.Add(fmt.Sprintf("foos[0].bars[%d].bazs", i), fmt.Sprintf("value%d", i))
+			urlValues.Add(fmt.Sprintf("foos[0].bars[%d].lookup[A]", i), fmt.Sprintf("lookupA%d", i))
+		}
+
+		var req FormRequest
+		start := time.Now()
+		err := decoder.Decode(&req, urlValues)
+		elapsed := time.Since(start)
+
+		if err != nil {
+			t.Errorf("Decode error for %d values: %v", tt.numValues, err)
+		}
+
+		// Verify correct decoding
+		if len(req.Foos) != 1 {
+			t.Errorf("Expected 1 Foo, got %d", len(req.Foos))
+		}
+		if len(req.Foos[0].Bars) != tt.numValues {
+			t.Errorf("Expected %d Bars, got %d", tt.numValues, len(req.Foos[0].Bars))
+		}
+
+		t.Logf("%6d decoded values took: %v", tt.numValues, elapsed)
+
+		if elapsed > tt.maxTime {
+			t.Errorf("Decoding %d values took %v, expected less than %v (performance regression?)",
+				tt.numValues, elapsed, tt.maxTime)
+		}
+	}
+}
+
+func BenchmarkIssue71Nested100(b *testing.B) {
+	type NestedBar struct {
+		Bazs   []string          `form:"bazs"`
+		Lookup map[string]string `form:"lookup"`
+	}
+
+	type NestedFoo struct {
+		Bars []*NestedBar `form:"bars"`
+	}
+
+	type FormRequest struct {
+		Foos []*NestedFoo `form:"foos"`
+	}
+
+	decoder := NewDecoder()
+	urlValues := make(url.Values)
+
+	for i := 0; i < 100; i++ {
+		urlValues.Add(fmt.Sprintf("foos[0].bars[%d].bazs", i), fmt.Sprintf("value%d", i))
+		urlValues.Add(fmt.Sprintf("foos[0].bars[%d].lookup[A]", i), fmt.Sprintf("lookupA%d", i))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var req FormRequest
+		decoder.Decode(&req, urlValues)
+	}
+}
+
+func BenchmarkIssue71Nested1000(b *testing.B) {
+	type NestedBar struct {
+		Bazs   []string          `form:"bazs"`
+		Lookup map[string]string `form:"lookup"`
+	}
+
+	type NestedFoo struct {
+		Bars []*NestedBar `form:"bars"`
+	}
+
+	type FormRequest struct {
+		Foos []*NestedFoo `form:"foos"`
+	}
+
+	decoder := NewDecoder()
+	urlValues := make(url.Values)
+
+	for i := 0; i < 1000; i++ {
+		urlValues.Add(fmt.Sprintf("foos[0].bars[%d].bazs", i), fmt.Sprintf("value%d", i))
+		urlValues.Add(fmt.Sprintf("foos[0].bars[%d].lookup[A]", i), fmt.Sprintf("lookupA%d", i))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var req FormRequest
+		decoder.Decode(&req, urlValues)
+	}
+}
