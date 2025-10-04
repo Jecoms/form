@@ -253,6 +253,26 @@ func (d *decoder) parseAndSetFloatKey(v reflect.Value, key string, bitSize int, 
 	return nil
 }
 
+// parseAndSetBool parses a string value as boolean and sets it on the reflect.Value
+func (d *decoder) parseAndSetBool(v reflect.Value, value string, namespace []byte, ns string) error {
+	b, err := parseBool(value)
+	if err != nil {
+		return fmt.Errorf("Invalid Boolean Value '%s' Type '%v' Namespace '%s'", value, v.Type(), ns)
+	}
+	v.SetBool(b)
+	return nil
+}
+
+// parseAndSetBoolKey is similar to parseAndSetBool but for map keys
+func (d *decoder) parseAndSetBoolKey(v reflect.Value, key string, ns string) error {
+	b, err := parseBool(key)
+	if err != nil {
+		return fmt.Errorf("Invalid Boolean Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
+	}
+	v.SetBool(b)
+	return nil
+}
+
 func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx int) (set bool) {
 
 	var err error
@@ -403,12 +423,10 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		if !ok || idx == len(arr) {
 			return
 		}
-		var b bool
-		if b, err = parseBool(arr[idx]); err != nil {
-			d.setError(namespace, fmt.Errorf("Invalid Boolean Value '%s' Type '%v' Namespace '%s'", arr[idx], v.Type(), ns))
+		if err = d.parseAndSetBool(v, arr[idx], namespace, ns); err != nil {
+			d.setError(namespace, err)
 			return
 		}
-		v.SetBool(b)
 		set = true
 
 	case reflect.Slice:
@@ -727,14 +745,7 @@ func (d *decoder) getMapKey(key string, current reflect.Value, namespace []byte)
 		err = d.parseAndSetFloatKey(v, key, 64, ns)
 
 	case reflect.Bool:
-
-		b, e := parseBool(key)
-		if e != nil {
-			err = fmt.Errorf("Invalid Boolean Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
-			return
-		}
-
-		v.SetBool(b)
+		err = d.parseAndSetBoolKey(v, key, ns)
 
 	default:
 		err = fmt.Errorf("Unsupported Map Key '%s', Type '%v' Namespace '%s'", key, v.Type(), ns)
