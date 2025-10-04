@@ -67,12 +67,62 @@ func (d *decoder) getOrCreateRecursiveData(alias string) *recursiveData {
 	return rd
 }
 
+// processKeyBracket processes a closing bracket in a key during map data parsing
+func (d *decoder) processKeyBracket(k string, idx, i int, isNum bool, rd *recursiveData) {
+	ke := key{
+		ivalue:      -1,
+		value:       k[idx+1 : i],
+		searchValue: k[idx : i+1],
+	}
+
+	// is key is number, most likely array key, keep track of just in case an array/slice.
+	if isNum {
+		// no need to check for error, it will always pass
+		// as we have done the checking to ensure
+		// the value is a number ahead of time.
+		var err error
+		ke.ivalue, err = strconv.Atoi(ke.value)
+		if err != nil {
+			ke.ivalue = -1
+		}
+
+		if ke.ivalue > rd.sliceLen {
+			rd.sliceLen = ke.ivalue
+		}
+	}
+
+	rd.keys = append(rd.keys, ke)
+}
+
 func (d *decoder) parseMapData() {
 	// already parsed
 	if len(d.dm) > 0 {
 		return
 	}
 
+	d.initializeMapData()
+
+	var idx int
+	var insideBracket bool
+	var rd *recursiveData
+	var isNum bool
+
+	for k := range d.values {
+		if len(k) > d.maxKeyLen {
+			d.maxKeyLen = len(k)
+		}
+
+		idx, insideBracket, isNum, rd = d.processKeyString(k, idx, insideBracket, isNum, rd)
+
+		// if still inside bracket, that means no ending bracket was ever specified
+		if insideBracket {
+			log.Panicf(errMissingEndBracket, k)
+		}
+	}
+}
+
+// initializeMapData resets the decoder's map data structures
+func (d *decoder) initializeMapData() {
 	d.maxKeyLen = 0
 	d.dm = d.dm[0:0]
 
@@ -83,75 +133,38 @@ func (d *decoder) parseMapData() {
 			delete(d.aliasMap, k)
 		}
 	}
+}
 
-	var i int
-	var idx int
-	var insideBracket bool
-	var rd *recursiveData
-	var isNum bool
+// processKeyString processes a key string character by character to identify brackets and numeric indexes
+func (d *decoder) processKeyString(k string, idx int, insideBracket bool, isNum bool, rd *recursiveData) (newIdx int, newInsideBracket bool, newIsNum bool, newRd *recursiveData) {
+	newIdx = idx
+	newInsideBracket = insideBracket
+	newIsNum = isNum
+	newRd = rd
 
-	for k := range d.values {
+	for i := 0; i < len(k); i++ {
+		switch k[i] {
+		case '[':
+			newIdx = i
+			newInsideBracket = true
+			newIsNum = true
+		case ']':
+			if !newInsideBracket {
+				log.Panicf(errMissingStartBracket, k)
+			}
 
-		if len(k) > d.maxKeyLen {
-			d.maxKeyLen = len(k)
-		}
+			newRd = d.getOrCreateRecursiveData(k[:newIdx])
+			d.processKeyBracket(k, newIdx, i, newIsNum, newRd)
+			newInsideBracket = false
 
-		for i = 0; i < len(k); i++ {
-
-			switch k[i] {
-			case '[':
-				idx = i
-				insideBracket = true
-				isNum = true
-			case ']':
-
-				if !insideBracket {
-					log.Panicf(errMissingStartBracket, k)
-				}
-
-				rd = d.getOrCreateRecursiveData(k[:idx])
-
-				// is map + key
-				ke := key{
-					ivalue:      -1,
-					value:       k[idx+1 : i],
-					searchValue: k[idx : i+1],
-				}
-
-				// is key is number, most likely array key, keep track of just in case an array/slice.
-				if isNum {
-
-					// no need to check for error, it will always pass
-					// as we have done the checking to ensure
-					// the value is a number ahead of time.
-					var err error
-					ke.ivalue, err = strconv.Atoi(ke.value)
-					if err != nil {
-						ke.ivalue = -1
-					}
-
-					if ke.ivalue > rd.sliceLen {
-						rd.sliceLen = ke.ivalue
-
-					}
-				}
-
-				rd.keys = append(rd.keys, ke)
-
-				insideBracket = false
-			default:
-				// checking if not a number, 0-9 is 48-57 in byte, see for yourself fmt.Println('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
-				if insideBracket && (k[i] > 57 || k[i] < 48) {
-					isNum = false
-				}
+		default:
+			// checking if not a number, 0-9 is 48-57 in byte
+			if newInsideBracket && (k[i] > 57 || k[i] < 48) {
+				newIsNum = false
 			}
 		}
-
-		// if still inside bracket, that means no ending bracket was ever specified
-		if insideBracket {
-			log.Panicf(errMissingEndBracket, k)
-		}
 	}
+	return
 }
 
 func (d *decoder) traverseStruct(v reflect.Value, typ reflect.Type, namespace []byte) (set bool) {
@@ -282,31 +295,44 @@ func (d *decoder) parseAndSetBoolKey(v reflect.Value, key string, ns string) err
 
 // setPrimitiveMapKey handles setting primitive types for map keys (uint, int, float, bool)
 func (d *decoder) setPrimitiveMapKey(v reflect.Value, key string, kind reflect.Kind, ns string) error {
-	switch kind {
-	case reflect.Uint, reflect.Uint64:
-		return d.parseAndSetUintKey(v, key, 64, ns)
-	case reflect.Uint8:
-		return d.parseAndSetUintKey(v, key, 8, ns)
-	case reflect.Uint16:
-		return d.parseAndSetUintKey(v, key, 16, ns)
-	case reflect.Uint32:
-		return d.parseAndSetUintKey(v, key, 32, ns)
-	case reflect.Int, reflect.Int64:
-		return d.parseAndSetIntKey(v, key, 64, ns)
-	case reflect.Int8:
-		return d.parseAndSetIntKey(v, key, 8, ns)
-	case reflect.Int16:
-		return d.parseAndSetIntKey(v, key, 16, ns)
-	case reflect.Int32:
-		return d.parseAndSetIntKey(v, key, 32, ns)
-	case reflect.Float32:
-		return d.parseAndSetFloatKey(v, key, 32, ns)
-	case reflect.Float64:
-		return d.parseAndSetFloatKey(v, key, 64, ns)
-	case reflect.Bool:
+	// Get bit size for numeric types
+	bitSize := getBitSize(kind)
+
+	// Handle unsigned integers
+	if kind >= reflect.Uint && kind <= reflect.Uint64 {
+		return d.parseAndSetUintKey(v, key, bitSize, ns)
+	}
+
+	// Handle signed integers
+	if kind >= reflect.Int && kind <= reflect.Int64 {
+		return d.parseAndSetIntKey(v, key, bitSize, ns)
+	}
+
+	// Handle floats
+	if kind == reflect.Float32 || kind == reflect.Float64 {
+		return d.parseAndSetFloatKey(v, key, bitSize, ns)
+	}
+
+	// Handle bool
+	if kind == reflect.Bool {
 		return d.parseAndSetBoolKey(v, key, ns)
 	}
+
 	return nil
+}
+
+// getBitSize returns the bit size for a given reflect.Kind
+func getBitSize(kind reflect.Kind) int {
+	switch kind {
+	case reflect.Uint8, reflect.Int8:
+		return 8
+	case reflect.Uint16, reflect.Int16:
+		return 16
+	case reflect.Uint32, reflect.Int32, reflect.Float32:
+		return 32
+	default:
+		return 64
+	}
 }
 
 // setPrimitiveValue handles setting primitive types (uint, int, float, bool)
@@ -315,35 +341,34 @@ func (d *decoder) setPrimitiveValue(v reflect.Value, arr []string, idx int, kind
 		return false, nil
 	}
 
-	switch kind {
-	case reflect.Uint, reflect.Uint64:
-		err = d.parseAndSetUint(v, arr[idx], 64, namespace, ns)
-	case reflect.Uint8:
-		err = d.parseAndSetUint(v, arr[idx], 8, namespace, ns)
-	case reflect.Uint16:
-		err = d.parseAndSetUint(v, arr[idx], 16, namespace, ns)
-	case reflect.Uint32:
-		err = d.parseAndSetUint(v, arr[idx], 32, namespace, ns)
-	case reflect.Int, reflect.Int64:
-		err = d.parseAndSetInt(v, arr[idx], 64, namespace, ns)
-	case reflect.Int8:
-		err = d.parseAndSetInt(v, arr[idx], 8, namespace, ns)
-	case reflect.Int16:
-		err = d.parseAndSetInt(v, arr[idx], 16, namespace, ns)
-	case reflect.Int32:
-		err = d.parseAndSetInt(v, arr[idx], 32, namespace, ns)
-	case reflect.Float32:
-		err = d.parseAndSetFloat(v, arr[idx], 32, namespace, ns)
-	case reflect.Float64:
-		err = d.parseAndSetFloat(v, arr[idx], 64, namespace, ns)
-	case reflect.Bool:
-		err = d.parseAndSetBool(v, arr[idx], namespace, ns)
+	value := arr[idx]
+	bitSize := getBitSize(kind)
+
+	// Handle unsigned integers
+	if kind >= reflect.Uint && kind <= reflect.Uint64 {
+		err = d.parseAndSetUint(v, value, bitSize, namespace, ns)
+		return err == nil, err
 	}
 
-	if err != nil {
-		return false, err
+	// Handle signed integers
+	if kind >= reflect.Int && kind <= reflect.Int64 {
+		err = d.parseAndSetInt(v, value, bitSize, namespace, ns)
+		return err == nil, err
 	}
-	return true, nil
+
+	// Handle floats
+	if kind == reflect.Float32 || kind == reflect.Float64 {
+		err = d.parseAndSetFloat(v, value, bitSize, namespace, ns)
+		return err == nil, err
+	}
+
+	// Handle bool
+	if kind == reflect.Bool {
+		err = d.parseAndSetBool(v, value, namespace, ns)
+		return err == nil, err
+	}
+
+	return false, nil
 }
 
 // setSlice handles decoding of slice types
@@ -657,9 +682,27 @@ func (d *decoder) handleSimpleTypes(v reflect.Value, kind reflect.Kind, arr []st
 	return false, false
 }
 
+// handlePrimitiveTypes handles all primitive types (uint, int, float, bool)
+func (d *decoder) handlePrimitiveTypes(v reflect.Value, kind reflect.Kind, arr []string, idx int, namespace []byte, ns string, ok bool) (handled bool, set bool) {
+	switch kind {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Float32, reflect.Float64, reflect.Bool:
+		if !ok {
+			return true, false
+		}
+		var err error
+		if set, err = d.setPrimitiveValue(v, arr, idx, kind, namespace, ns); err != nil {
+			d.setError(namespace, err)
+			return true, false
+		}
+		return true, set
+	}
+	return false, false
+}
+
 func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx int) (set bool) {
 
-	var err error
 	v, kind := ExtractType(current)
 
 	// Convert namespace to string once to avoid repeated allocations
@@ -678,18 +721,12 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		return simpleSet
 	}
 
-	switch kind {
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Float32, reflect.Float64, reflect.Bool:
-		if !ok {
-			return
-		}
-		if set, err = d.setPrimitiveValue(v, arr, idx, kind, namespace, ns); err != nil {
-			d.setError(namespace, err)
-			return
-		}
+	// Handle primitive types (uint, int, float, bool)
+	if handled, primitiveSet := d.handlePrimitiveTypes(v, kind, arr, idx, namespace, ns, ok); handled {
+		return primitiveSet
+	}
 
+	switch kind {
 	case reflect.Slice:
 		set = d.handleSliceField(v, arr, namespace, ns, ok)
 

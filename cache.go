@@ -84,44 +84,9 @@ func (s *structCacheMap) parseStruct(mode Mode, current reflect.Value, key refle
 
 	numFields := current.NumField()
 
-	var fld reflect.StructField
-	var name string
-	var idx int
-	var isOmitEmpty bool
-
 	for i := 0; i < numFields; i++ {
-		isOmitEmpty = false
-		fld = typ.Field(i)
-
-		if fld.PkgPath != blank && !fld.Anonymous {
-			continue
-		}
-
-		if s.tagFn != nil {
-			name = s.tagFn(fld)
-		} else {
-			name = fld.Tag.Get(tagName)
-		}
-
-		if name == ignore {
-			continue
-		}
-
-		if mode == ModeExplicit && len(name) == 0 {
-			continue
-		}
-
-		// check for omitempty
-		if idx = strings.LastIndexByte(name, ','); idx != -1 {
-			isOmitEmpty = name[idx+1:] == "omitempty"
-			name = name[:idx]
-		}
-
-		if len(name) == 0 {
-			name = fld.Name
-		}
-
-		cs.fields = append(cs.fields, cachedField{idx: i, name: name, isAnonymous: fld.Anonymous, isOmitEmpty: isOmitEmpty})
+		fld := typ.Field(i)
+		s.processStructField(cs, fld, mode, tagName)
 	}
 
 	sort.Sort(cs.fields)
@@ -130,4 +95,44 @@ func (s *structCacheMap) parseStruct(mode Mode, current reflect.Value, key refle
 	s.lock.Unlock()
 
 	return cs
+}
+
+// processStructField processes a single struct field and adds it to the cached struct if valid
+func (s *structCacheMap) processStructField(cs *cachedStruct, fld reflect.StructField, mode Mode, tagName string) {
+	if fld.PkgPath != blank && !fld.Anonymous {
+		return
+	}
+
+	name := s.getFieldName(fld, tagName)
+	if name == ignore {
+		return
+	}
+
+	if mode == ModeExplicit && len(name) == 0 {
+		return
+	}
+
+	name, isOmitEmpty := s.parseFieldTag(name)
+
+	if len(name) == 0 {
+		name = fld.Name
+	}
+
+	cs.fields = append(cs.fields, cachedField{idx: fld.Index[0], name: name, isAnonymous: fld.Anonymous, isOmitEmpty: isOmitEmpty})
+}
+
+// getFieldName gets the field name from the tag using tagFn or tag lookup
+func (s *structCacheMap) getFieldName(fld reflect.StructField, tagName string) string {
+	if s.tagFn != nil {
+		return s.tagFn(fld)
+	}
+	return fld.Tag.Get(tagName)
+}
+
+// parseFieldTag parses the field tag to extract the name and omitempty option
+func (s *structCacheMap) parseFieldTag(name string) (string, bool) {
+	if idx := strings.LastIndexByte(name, ','); idx != -1 {
+		return name[:idx], name[idx+1:] == "omitempty"
+	}
+	return name, false
 }

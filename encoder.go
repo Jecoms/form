@@ -190,12 +190,24 @@ func (e *encoder) tryCustomTypeFunc(v reflect.Value, namespace []byte, idx int) 
 	return true
 }
 
-func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx int, isOmitEmpty bool) {
+// handleSimpleTypes handles string and primitive types
+func (e *encoder) handleSimpleTypes(v reflect.Value, kind reflect.Kind, namespace []byte, idx int) (handled bool) {
+	switch kind {
+	case reflect.String:
+		e.setVal(namespace, idx, v.String())
+		return true
 
-	if idx > -1 && current.Kind() == reflect.Ptr {
-		namespace = e.appendIndex(namespace, idx)
-		idx = -2
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Float32, reflect.Float64, reflect.Bool:
+		e.setVal(namespace, idx, e.formatPrimitiveValue(v, kind))
+		return true
 	}
+	return false
+}
+
+func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx int, isOmitEmpty bool) {
+	idx, namespace = e.handleIndexAndNamespace(current, namespace, idx)
 
 	if isOmitEmpty && !hasValue(current) {
 		return
@@ -207,17 +219,14 @@ func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		return
 	}
 
+	// Handle simple types (string, primitives)
+	if e.handleSimpleTypes(v, kind, namespace, idx) {
+		return
+	}
+
 	switch kind {
 	case reflect.Ptr, reflect.Interface, reflect.Invalid:
 		return
-
-	case reflect.String:
-		e.setVal(namespace, idx, v.String())
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Float32, reflect.Float64, reflect.Bool:
-		e.setVal(namespace, idx, e.formatPrimitiveValue(v, kind))
 
 	case reflect.Slice, reflect.Array:
 		e.setSliceOrArray(v, namespace, idx)
@@ -228,6 +237,15 @@ func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 	case reflect.Struct:
 		e.setStructField(v, namespace, idx)
 	}
+}
+
+// handleIndexAndNamespace adjusts the index and namespace for pointer types
+func (e *encoder) handleIndexAndNamespace(current reflect.Value, namespace []byte, idx int) (int, []byte) {
+	if idx > -1 && current.Kind() == reflect.Ptr {
+		namespace = e.appendIndex(namespace, idx)
+		idx = -2
+	}
+	return idx, namespace
 }
 
 func (e *encoder) getMapKey(key reflect.Value, namespace []byte) (string, bool) {
