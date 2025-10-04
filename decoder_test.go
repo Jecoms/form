@@ -1955,16 +1955,36 @@ func TestIssue71NestedPerformance(t *testing.T) {
 
 	decoder := NewDecoder()
 
-	tests := []struct {
+	// Adjust thresholds based on race detector
+	// Race detector adds 5-10x overhead, especially on older Go versions
+	var thresholds []struct {
 		numValues int
 		maxTime   time.Duration
-	}{
-		{10, 10 * time.Millisecond},
-		{100, 100 * time.Millisecond},
-		{1000, 10 * time.Second},
+	}
+	
+	if raceEnabled {
+		// Lenient thresholds for race detector mode (CI)
+		thresholds = []struct {
+			numValues int
+			maxTime   time.Duration
+		}{
+			{10, 50 * time.Millisecond},
+			{100, 500 * time.Millisecond},
+			{1000, 35 * time.Second},
+		}
+	} else {
+		// Strict thresholds for normal mode (local dev)
+		thresholds = []struct {
+			numValues int
+			maxTime   time.Duration
+		}{
+			{10, 10 * time.Millisecond},
+			{100, 100 * time.Millisecond},
+			{1000, 10 * time.Second},
+		}
 	}
 
-	for _, tt := range tests {
+	for _, tt := range thresholds {
 		urlValues := make(url.Values)
 
 		// Generate test data with nested structure
