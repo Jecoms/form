@@ -273,6 +273,35 @@ func (d *decoder) parseAndSetBoolKey(v reflect.Value, key string, ns string) err
 	return nil
 }
 
+// setPrimitiveMapKey handles setting primitive types for map keys (uint, int, float, bool)
+func (d *decoder) setPrimitiveMapKey(v reflect.Value, key string, kind reflect.Kind, ns string) error {
+	switch kind {
+	case reflect.Uint, reflect.Uint64:
+		return d.parseAndSetUintKey(v, key, 64, ns)
+	case reflect.Uint8:
+		return d.parseAndSetUintKey(v, key, 8, ns)
+	case reflect.Uint16:
+		return d.parseAndSetUintKey(v, key, 16, ns)
+	case reflect.Uint32:
+		return d.parseAndSetUintKey(v, key, 32, ns)
+	case reflect.Int, reflect.Int64:
+		return d.parseAndSetIntKey(v, key, 64, ns)
+	case reflect.Int8:
+		return d.parseAndSetIntKey(v, key, 8, ns)
+	case reflect.Int16:
+		return d.parseAndSetIntKey(v, key, 16, ns)
+	case reflect.Int32:
+		return d.parseAndSetIntKey(v, key, 32, ns)
+	case reflect.Float32:
+		return d.parseAndSetFloatKey(v, key, 32, ns)
+	case reflect.Float64:
+		return d.parseAndSetFloatKey(v, key, 64, ns)
+	case reflect.Bool:
+		return d.parseAndSetBoolKey(v, key, ns)
+	}
+	return nil
+}
+
 // setPrimitiveValue handles setting primitive types (uint, int, float, bool)
 func (d *decoder) setPrimitiveValue(v reflect.Value, arr []string, idx int, kind reflect.Kind, namespace []byte, ns string) (set bool, err error) {
 	if idx >= len(arr) {
@@ -660,38 +689,10 @@ func (d *decoder) getMapKey(key string, current reflect.Value, namespace []byte)
 	case reflect.String:
 		v.SetString(key)
 
-	case reflect.Uint, reflect.Uint64:
-		err = d.parseAndSetUintKey(v, key, 64, ns)
-
-	case reflect.Uint8:
-		err = d.parseAndSetUintKey(v, key, 8, ns)
-
-	case reflect.Uint16:
-		err = d.parseAndSetUintKey(v, key, 16, ns)
-
-	case reflect.Uint32:
-		err = d.parseAndSetUintKey(v, key, 32, ns)
-
-	case reflect.Int, reflect.Int64:
-		err = d.parseAndSetIntKey(v, key, 64, ns)
-
-	case reflect.Int8:
-		err = d.parseAndSetIntKey(v, key, 8, ns)
-
-	case reflect.Int16:
-		err = d.parseAndSetIntKey(v, key, 16, ns)
-
-	case reflect.Int32:
-		err = d.parseAndSetIntKey(v, key, 32, ns)
-
-	case reflect.Float32:
-		err = d.parseAndSetFloatKey(v, key, 32, ns)
-
-	case reflect.Float64:
-		err = d.parseAndSetFloatKey(v, key, 64, ns)
-
-	case reflect.Bool:
-		err = d.parseAndSetBoolKey(v, key, ns)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Float32, reflect.Float64, reflect.Bool:
+		err = d.setPrimitiveMapKey(v, key, kind, ns)
 
 	default:
 		err = fmt.Errorf("Unsupported Map Key '%s', Type '%v' Namespace '%s'", key, v.Type(), ns)
