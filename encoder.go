@@ -85,12 +85,41 @@ func (e *encoder) formatPrimitiveValue(v reflect.Value, kind reflect.Kind) strin
 	return ""
 }
 
+// appendIndex appends [idx] to namespace
+func (e *encoder) appendIndex(namespace []byte, idx int) []byte {
+	namespace = append(namespace, '[')
+	namespace = strconv.AppendInt(namespace, int64(idx), 10)
+	namespace = append(namespace, ']')
+	return namespace
+}
+
+// setStructField handles encoding of struct types
+func (e *encoder) setStructField(v reflect.Value, namespace []byte, idx int) {
+	// if we get here then no custom time function declared so use RFC3339 by default
+	if v.Type() == timeType {
+		if idx > -1 {
+			namespace = e.appendIndex(namespace, idx)
+		}
+		e.setVal(namespace, idx, v.Interface().(time.Time).Format(time.RFC3339))
+		return
+	}
+
+	if idx == -1 {
+		e.traverseStruct(v, namespace, idx)
+		return
+	}
+
+	if idx > -1 {
+		namespace = e.appendIndex(namespace, idx)
+	}
+
+	e.traverseStruct(v, namespace, -2)
+}
+
 func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx int, isOmitEmpty bool) {
 
 	if idx > -1 && current.Kind() == reflect.Ptr {
-		namespace = append(namespace, '[')
-		namespace = strconv.AppendInt(namespace, int64(idx), 10)
-		namespace = append(namespace, ']')
+		namespace = e.appendIndex(namespace, idx)
 		idx = -2
 	}
 
@@ -110,9 +139,7 @@ func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 			}
 
 			if idx > -1 {
-				namespace = append(namespace, '[')
-				namespace = strconv.AppendInt(namespace, int64(idx), 10)
-				namespace = append(namespace, ']')
+				namespace = e.appendIndex(namespace, idx)
 			}
 
 			e.setVal(namespace, idx, arr...)
@@ -144,9 +171,7 @@ func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		}
 
 		if idx > -1 {
-			namespace = append(namespace, '[')
-			namespace = strconv.AppendInt(namespace, int64(idx), 10)
-			namespace = append(namespace, ']')
+			namespace = e.appendIndex(namespace, idx)
 		}
 
 		namespace = append(namespace, '[')
@@ -162,9 +187,7 @@ func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 	case reflect.Map:
 
 		if idx > -1 {
-			namespace = append(namespace, '[')
-			namespace = strconv.AppendInt(namespace, int64(idx), 10)
-			namespace = append(namespace, ']')
+			namespace = e.appendIndex(namespace, idx)
 		}
 
 		var valid bool
@@ -187,32 +210,7 @@ func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		}
 
 	case reflect.Struct:
-
-		// if we get here then no custom time function declared so use RFC3339 by default
-		if v.Type() == timeType {
-
-			if idx > -1 {
-				namespace = append(namespace, '[')
-				namespace = strconv.AppendInt(namespace, int64(idx), 10)
-				namespace = append(namespace, ']')
-			}
-
-			e.setVal(namespace, idx, v.Interface().(time.Time).Format(time.RFC3339))
-			return
-		}
-
-		if idx == -1 {
-			e.traverseStruct(v, namespace, idx)
-			return
-		}
-
-		if idx > -1 {
-			namespace = append(namespace, '[')
-			namespace = strconv.AppendInt(namespace, int64(idx), 10)
-			namespace = append(namespace, ']')
-		}
-
-		e.traverseStruct(v, namespace, -2)
+		e.setStructField(v, namespace, idx)
 	}
 }
 
