@@ -450,10 +450,14 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 					continue
 				}
 
-				if d.setFieldByType(newVal, append(namespace, kv.searchValue...), 0) {
+				// Reuse namespace buffer to avoid allocations
+				oldLen := len(namespace)
+				namespace = append(namespace, kv.searchValue...)
+				if d.setFieldByType(newVal, namespace, 0) {
 					set = true
 					varr.Index(kv.ivalue).Set(newVal)
 				}
+				namespace = namespace[:oldLen]
 			}
 
 			if !set {
@@ -520,10 +524,14 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 					continue
 				}
 
-				if d.setFieldByType(newVal, append(namespace, kv.searchValue...), 0) {
+				// Reuse namespace buffer to avoid allocations
+				oldLen := len(namespace)
+				namespace = append(namespace, kv.searchValue...)
+				if d.setFieldByType(newVal, namespace, 0) {
 					set = true
 					varr.Index(kv.ivalue).Set(newVal)
 				}
+				namespace = namespace[:oldLen]
 			}
 
 			if !set {
@@ -566,10 +574,14 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 				continue
 			}
 
-			if d.setFieldByType(newVal, append(namespace, kv.searchValue...), 0) {
+			// Reuse namespace buffer to avoid allocations
+			oldLen := len(namespace)
+			namespace = append(namespace, kv.searchValue...)
+			if d.setFieldByType(newVal, namespace, 0) {
 				set = true
 				mp.SetMapIndex(mk, newVal)
 			}
+			namespace = namespace[:oldLen]
 		}
 
 		if !set || existing {
