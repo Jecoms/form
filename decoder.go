@@ -184,6 +184,75 @@ func (d *decoder) traverseStruct(v reflect.Value, typ reflect.Type, namespace []
 	return
 }
 
+// parseAndSetUint parses a string value as unsigned integer and sets it on the reflect.Value
+func (d *decoder) parseAndSetUint(v reflect.Value, value string, bitSize int, namespace []byte, ns string) error {
+	if len(value) == 0 {
+		return nil
+	}
+	u64, err := strconv.ParseUint(value, 10, bitSize)
+	if err != nil {
+		return fmt.Errorf("Invalid Unsigned Integer Value '%s' Type '%v' Namespace '%s'", value, v.Type(), ns)
+	}
+	v.SetUint(u64)
+	return nil
+}
+
+// parseAndSetInt parses a string value as signed integer and sets it on the reflect.Value
+func (d *decoder) parseAndSetInt(v reflect.Value, value string, bitSize int, namespace []byte, ns string) error {
+	if len(value) == 0 {
+		return nil
+	}
+	i64, err := strconv.ParseInt(value, 10, bitSize)
+	if err != nil {
+		return fmt.Errorf("Invalid Integer Value '%s' Type '%v' Namespace '%s'", value, v.Type(), ns)
+	}
+	v.SetInt(i64)
+	return nil
+}
+
+// parseAndSetFloat parses a string value as float and sets it on the reflect.Value
+func (d *decoder) parseAndSetFloat(v reflect.Value, value string, bitSize int, namespace []byte, ns string) error {
+	if len(value) == 0 {
+		return nil
+	}
+	f, err := strconv.ParseFloat(value, bitSize)
+	if err != nil {
+		return fmt.Errorf("Invalid Float Value '%s' Type '%v' Namespace '%s'", value, v.Type(), ns)
+	}
+	v.SetFloat(f)
+	return nil
+}
+
+// parseAndSetUintKey is similar to parseAndSetUint but for map keys
+func (d *decoder) parseAndSetUintKey(v reflect.Value, key string, bitSize int, ns string) error {
+	u64, err := strconv.ParseUint(key, 10, bitSize)
+	if err != nil {
+		return fmt.Errorf("Invalid Unsigned Integer Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
+	}
+	v.SetUint(u64)
+	return nil
+}
+
+// parseAndSetIntKey is similar to parseAndSetInt but for map keys
+func (d *decoder) parseAndSetIntKey(v reflect.Value, key string, bitSize int, ns string) error {
+	i64, err := strconv.ParseInt(key, 10, bitSize)
+	if err != nil {
+		return fmt.Errorf("Invalid Integer Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
+	}
+	v.SetInt(i64)
+	return nil
+}
+
+// parseAndSetFloatKey is similar to parseAndSetFloat but for map keys
+func (d *decoder) parseAndSetFloatKey(v reflect.Value, key string, bitSize int, ns string) error {
+	f, err := strconv.ParseFloat(key, bitSize)
+	if err != nil {
+		return fmt.Errorf("Invalid Float Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
+	}
+	v.SetFloat(f)
+	return nil
+}
+
 func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx int) (set bool) {
 
 	var err error
@@ -231,123 +300,103 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		set = true
 
 	case reflect.Uint, reflect.Uint64:
-		if !ok || idx == len(arr) || len(arr[idx]) == 0 {
+		if !ok || idx == len(arr) {
 			return
 		}
-		var u64 uint64
-		if u64, err = strconv.ParseUint(arr[idx], 10, 64); err != nil {
-			d.setError(namespace, fmt.Errorf("Invalid Unsigned Integer Value '%s' Type '%v' Namespace '%s'", arr[idx], v.Type(), ns))
+		if err = d.parseAndSetUint(v, arr[idx], 64, namespace, ns); err != nil {
+			d.setError(namespace, err)
 			return
 		}
-		v.SetUint(u64)
 		set = true
 
 	case reflect.Uint8:
-		if !ok || idx == len(arr) || len(arr[idx]) == 0 {
+		if !ok || idx == len(arr) {
 			return
 		}
-		var u64 uint64
-		if u64, err = strconv.ParseUint(arr[idx], 10, 8); err != nil {
-			d.setError(namespace, fmt.Errorf("Invalid Unsigned Integer Value '%s' Type '%v' Namespace '%s'", arr[idx], v.Type(), ns))
+		if err = d.parseAndSetUint(v, arr[idx], 8, namespace, ns); err != nil {
+			d.setError(namespace, err)
 			return
 		}
-		v.SetUint(u64)
 		set = true
 
 	case reflect.Uint16:
-		if !ok || idx == len(arr) || len(arr[idx]) == 0 {
+		if !ok || idx == len(arr) {
 			return
 		}
-		var u64 uint64
-		if u64, err = strconv.ParseUint(arr[idx], 10, 16); err != nil {
-			d.setError(namespace, fmt.Errorf("Invalid Unsigned Integer Value '%s' Type '%v' Namespace '%s'", arr[idx], v.Type(), ns))
+		if err = d.parseAndSetUint(v, arr[idx], 16, namespace, ns); err != nil {
+			d.setError(namespace, err)
 			return
 		}
-		v.SetUint(u64)
 		set = true
 
 	case reflect.Uint32:
-		if !ok || idx == len(arr) || len(arr[idx]) == 0 {
+		if !ok || idx == len(arr) {
 			return
 		}
-		var u64 uint64
-		if u64, err = strconv.ParseUint(arr[idx], 10, 32); err != nil {
-			d.setError(namespace, fmt.Errorf("Invalid Unsigned Integer Value '%s' Type '%v' Namespace '%s'", arr[idx], v.Type(), ns))
+		if err = d.parseAndSetUint(v, arr[idx], 32, namespace, ns); err != nil {
+			d.setError(namespace, err)
 			return
 		}
-		v.SetUint(u64)
 		set = true
 
 	case reflect.Int, reflect.Int64:
-		if !ok || idx == len(arr) || len(arr[idx]) == 0 {
+		if !ok || idx == len(arr) {
 			return
 		}
-		var i64 int64
-		if i64, err = strconv.ParseInt(arr[idx], 10, 64); err != nil {
-			d.setError(namespace, fmt.Errorf("Invalid Integer Value '%s' Type '%v' Namespace '%s'", arr[idx], v.Type(), ns))
+		if err = d.parseAndSetInt(v, arr[idx], 64, namespace, ns); err != nil {
+			d.setError(namespace, err)
 			return
 		}
-		v.SetInt(i64)
 		set = true
 
 	case reflect.Int8:
-		if !ok || idx == len(arr) || len(arr[idx]) == 0 {
+		if !ok || idx == len(arr) {
 			return
 		}
-		var i64 int64
-		if i64, err = strconv.ParseInt(arr[idx], 10, 8); err != nil {
-			d.setError(namespace, fmt.Errorf("Invalid Integer Value '%s' Type '%v' Namespace '%s'", arr[idx], v.Type(), ns))
+		if err = d.parseAndSetInt(v, arr[idx], 8, namespace, ns); err != nil {
+			d.setError(namespace, err)
 			return
 		}
-		v.SetInt(i64)
 		set = true
 
 	case reflect.Int16:
-		if !ok || idx == len(arr) || len(arr[idx]) == 0 {
+		if !ok || idx == len(arr) {
 			return
 		}
-		var i64 int64
-		if i64, err = strconv.ParseInt(arr[idx], 10, 16); err != nil {
-			d.setError(namespace, fmt.Errorf("Invalid Integer Value '%s' Type '%v' Namespace '%s'", arr[idx], v.Type(), ns))
+		if err = d.parseAndSetInt(v, arr[idx], 16, namespace, ns); err != nil {
+			d.setError(namespace, err)
 			return
 		}
-		v.SetInt(i64)
 		set = true
 
 	case reflect.Int32:
-		if !ok || idx == len(arr) || len(arr[idx]) == 0 {
+		if !ok || idx == len(arr) {
 			return
 		}
-		var i64 int64
-		if i64, err = strconv.ParseInt(arr[idx], 10, 32); err != nil {
-			d.setError(namespace, fmt.Errorf("Invalid Integer Value '%s' Type '%v' Namespace '%s'", arr[idx], v.Type(), ns))
+		if err = d.parseAndSetInt(v, arr[idx], 32, namespace, ns); err != nil {
+			d.setError(namespace, err)
 			return
 		}
-		v.SetInt(i64)
 		set = true
 
 	case reflect.Float32:
-		if !ok || idx == len(arr) || len(arr[idx]) == 0 {
+		if !ok || idx == len(arr) {
 			return
 		}
-		var f float64
-		if f, err = strconv.ParseFloat(arr[idx], 32); err != nil {
-			d.setError(namespace, fmt.Errorf("Invalid Float Value '%s' Type '%v' Namespace '%s'", arr[idx], v.Type(), ns))
+		if err = d.parseAndSetFloat(v, arr[idx], 32, namespace, ns); err != nil {
+			d.setError(namespace, err)
 			return
 		}
-		v.SetFloat(f)
 		set = true
 
 	case reflect.Float64:
-		if !ok || idx == len(arr) || len(arr[idx]) == 0 {
+		if !ok || idx == len(arr) {
 			return
 		}
-		var f float64
-		if f, err = strconv.ParseFloat(arr[idx], 64); err != nil {
-			d.setError(namespace, fmt.Errorf("Invalid Float Value '%s' Type '%v' Namespace '%s'", arr[idx], v.Type(), ns))
+		if err = d.parseAndSetFloat(v, arr[idx], 64, namespace, ns); err != nil {
+			d.setError(namespace, err)
 			return
 		}
-		v.SetFloat(f)
 		set = true
 
 	case reflect.Bool:
@@ -648,104 +697,34 @@ func (d *decoder) getMapKey(key string, current reflect.Value, namespace []byte)
 		v.SetString(key)
 
 	case reflect.Uint, reflect.Uint64:
-
-		u64, e := strconv.ParseUint(key, 10, 64)
-		if e != nil {
-			err = fmt.Errorf("Invalid Unsigned Integer Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
-			return
-		}
-
-		v.SetUint(u64)
+		err = d.parseAndSetUintKey(v, key, 64, ns)
 
 	case reflect.Uint8:
-
-		u64, e := strconv.ParseUint(key, 10, 8)
-		if e != nil {
-			err = fmt.Errorf("Invalid Unsigned Integer Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
-			return
-		}
-
-		v.SetUint(u64)
+		err = d.parseAndSetUintKey(v, key, 8, ns)
 
 	case reflect.Uint16:
-
-		u64, e := strconv.ParseUint(key, 10, 16)
-		if e != nil {
-			err = fmt.Errorf("Invalid Unsigned Integer Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
-			return
-		}
-
-		v.SetUint(u64)
+		err = d.parseAndSetUintKey(v, key, 16, ns)
 
 	case reflect.Uint32:
-
-		u64, e := strconv.ParseUint(key, 10, 32)
-		if e != nil {
-			err = fmt.Errorf("Invalid Unsigned Integer Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
-			return
-		}
-
-		v.SetUint(u64)
+		err = d.parseAndSetUintKey(v, key, 32, ns)
 
 	case reflect.Int, reflect.Int64:
-
-		i64, e := strconv.ParseInt(key, 10, 64)
-		if e != nil {
-			err = fmt.Errorf("Invalid Integer Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
-			return
-		}
-
-		v.SetInt(i64)
+		err = d.parseAndSetIntKey(v, key, 64, ns)
 
 	case reflect.Int8:
-
-		i64, e := strconv.ParseInt(key, 10, 8)
-		if e != nil {
-			err = fmt.Errorf("Invalid Integer Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
-			return
-		}
-
-		v.SetInt(i64)
+		err = d.parseAndSetIntKey(v, key, 8, ns)
 
 	case reflect.Int16:
-
-		i64, e := strconv.ParseInt(key, 10, 16)
-		if e != nil {
-			err = fmt.Errorf("Invalid Integer Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
-			return
-		}
-
-		v.SetInt(i64)
+		err = d.parseAndSetIntKey(v, key, 16, ns)
 
 	case reflect.Int32:
-
-		i64, e := strconv.ParseInt(key, 10, 32)
-		if e != nil {
-			err = fmt.Errorf("Invalid Integer Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
-			return
-		}
-
-		v.SetInt(i64)
+		err = d.parseAndSetIntKey(v, key, 32, ns)
 
 	case reflect.Float32:
-
-		f, e := strconv.ParseFloat(key, 32)
-		if e != nil {
-			err = fmt.Errorf("Invalid Float Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
-			return
-		}
-
-		v.SetFloat(f)
+		err = d.parseAndSetFloatKey(v, key, 32, ns)
 
 	case reflect.Float64:
-
-		f, e := strconv.ParseFloat(key, 64)
-		if e != nil {
-			err = fmt.Errorf("Invalid Float Value '%s' Type '%v' Namespace '%s'", key, v.Type(), ns)
-			return
-		}
-
-		v.SetFloat(f)
+		err = d.parseAndSetFloatKey(v, key, 64, ns)
 
 	case reflect.Bool:
 
