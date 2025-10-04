@@ -116,6 +116,80 @@ func (e *encoder) setStructField(v reflect.Value, namespace []byte, idx int) {
 	e.traverseStruct(v, namespace, -2)
 }
 
+// setSliceOrArray handles encoding of slice and array types
+func (e *encoder) setSliceOrArray(v reflect.Value, namespace []byte, idx int) {
+	if idx == -1 {
+		for i := 0; i < v.Len(); i++ {
+			e.setFieldByType(v.Index(i), namespace, i, false)
+		}
+		return
+	}
+
+	if idx > -1 {
+		namespace = e.appendIndex(namespace, idx)
+	}
+
+	namespace = append(namespace, '[')
+	l := len(namespace)
+
+	for i := 0; i < v.Len(); i++ {
+		namespace = namespace[:l]
+		namespace = strconv.AppendInt(namespace, int64(i), 10)
+		namespace = append(namespace, ']')
+		e.setFieldByType(v.Index(i), namespace, -2, false)
+	}
+}
+
+// setMapField handles encoding of map types
+func (e *encoder) setMapField(v reflect.Value, namespace []byte, idx int) {
+	if idx > -1 {
+		namespace = e.appendIndex(namespace, idx)
+	}
+
+	var valid bool
+	var s string
+	l := len(namespace)
+
+	for _, key := range v.MapKeys() {
+		namespace = namespace[:l]
+
+		if s, valid = e.getMapKey(key, namespace); !valid {
+			continue
+		}
+
+		namespace = append(namespace, '[')
+		namespace = append(namespace, s...)
+		namespace = append(namespace, ']')
+
+		e.setFieldByType(v.MapIndex(key), namespace, -2, false)
+	}
+}
+
+// tryCustomTypeFunc attempts to use a custom type function if registered
+func (e *encoder) tryCustomTypeFunc(v reflect.Value, namespace []byte, idx int) (handled bool) {
+	if e.e.customTypeFuncs == nil {
+		return false
+	}
+
+	cf, ok := e.e.customTypeFuncs[v.Type()]
+	if !ok {
+		return false
+	}
+
+	arr, err := cf(v.Interface())
+	if err != nil {
+		e.setError(namespace, err)
+		return true
+	}
+
+	if idx > -1 {
+		namespace = e.appendIndex(namespace, idx)
+	}
+
+	e.setVal(namespace, idx, arr...)
+	return true
+}
+
 func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx int, isOmitEmpty bool) {
 
 	if idx > -1 && current.Kind() == reflect.Ptr {
@@ -128,23 +202,9 @@ func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 	}
 	v, kind := ExtractType(current)
 
-	if e.e.customTypeFuncs != nil {
-
-		if cf, ok := e.e.customTypeFuncs[v.Type()]; ok {
-
-			arr, err := cf(v.Interface())
-			if err != nil {
-				e.setError(namespace, err)
-				return
-			}
-
-			if idx > -1 {
-				namespace = e.appendIndex(namespace, idx)
-			}
-
-			e.setVal(namespace, idx, arr...)
-			return
-		}
+	// Try custom type function first
+	if e.tryCustomTypeFunc(v, namespace, idx) {
+		return
 	}
 
 	switch kind {
@@ -160,54 +220,10 @@ func (e *encoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		e.setVal(namespace, idx, e.formatPrimitiveValue(v, kind))
 
 	case reflect.Slice, reflect.Array:
-
-		if idx == -1 {
-
-			for i := 0; i < v.Len(); i++ {
-				e.setFieldByType(v.Index(i), namespace, i, false)
-			}
-
-			return
-		}
-
-		if idx > -1 {
-			namespace = e.appendIndex(namespace, idx)
-		}
-
-		namespace = append(namespace, '[')
-		l := len(namespace)
-
-		for i := 0; i < v.Len(); i++ {
-			namespace = namespace[:l]
-			namespace = strconv.AppendInt(namespace, int64(i), 10)
-			namespace = append(namespace, ']')
-			e.setFieldByType(v.Index(i), namespace, -2, false)
-		}
+		e.setSliceOrArray(v, namespace, idx)
 
 	case reflect.Map:
-
-		if idx > -1 {
-			namespace = e.appendIndex(namespace, idx)
-		}
-
-		var valid bool
-		var s string
-		l := len(namespace)
-
-		for _, key := range v.MapKeys() {
-
-			namespace = namespace[:l]
-
-			if s, valid = e.getMapKey(key, namespace); !valid {
-				continue
-			}
-
-			namespace = append(namespace, '[')
-			namespace = append(namespace, s...)
-			namespace = append(namespace, ']')
-
-			e.setFieldByType(v.MapIndex(key), namespace, -2, false)
-		}
+		e.setMapField(v, namespace, idx)
 
 	case reflect.Struct:
 		e.setStructField(v, namespace, idx)

@@ -569,6 +569,94 @@ func (d *decoder) setStructField(v reflect.Value, typ reflect.Type, arr []string
 	return
 }
 
+// handleSliceField handles decoding of slice types with all cases
+func (d *decoder) handleSliceField(v reflect.Value, arr []string, namespace []byte, ns string, ok bool) (set bool) {
+	d.parseMapData()
+	if ok {
+		set = d.setSlice(v, arr, namespace, ns)
+	}
+	// maybe it's an numbered array i.e. Phone[0].Number
+	if rd := d.findAlias(ns); rd != nil {
+		if d.setSliceWithIndexes(v, rd, namespace) {
+			set = true
+		}
+	}
+	return
+}
+
+// handleArrayField handles decoding of array types with all cases
+func (d *decoder) handleArrayField(v reflect.Value, arr []string, namespace []byte, ns string, ok bool) (set bool) {
+	d.parseMapData()
+	if ok {
+		set = d.setArray(v, arr, namespace)
+	}
+	// maybe it's an numbered array i.e. Phone[0].Number
+	if rd := d.findAlias(ns); rd != nil {
+		if d.setArrayWithIndexes(v, rd, namespace) {
+			set = true
+		}
+	}
+	return
+}
+
+// handleMapField handles decoding of map types
+func (d *decoder) handleMapField(v reflect.Value, namespace []byte, ns string) (set bool) {
+	d.parseMapData()
+	// no natural map support so skip directly to dm lookup
+	if rd := d.findAlias(ns); rd != nil {
+		set = d.setMap(v, rd, namespace)
+	}
+	return
+}
+
+// tryCustomTypeFunc attempts to use a custom type function if registered
+func (d *decoder) tryCustomTypeFunc(v reflect.Value, arr []string, idx int, namespace []byte) (handled bool, set bool) {
+	if d.d.customTypeFuncs == nil {
+		return false, false
+	}
+
+	cf, ok := d.d.customTypeFuncs[v.Type()]
+	if !ok {
+		return false, false
+	}
+
+	val, err := cf(arr[idx:])
+	if err != nil {
+		d.setError(namespace, err)
+		return true, false
+	}
+
+	v.Set(reflect.ValueOf(val))
+	return true, true
+}
+
+// handleSimpleTypes handles interface, pointer, and string types
+func (d *decoder) handleSimpleTypes(v reflect.Value, kind reflect.Kind, arr []string, idx int, namespace []byte, ok bool) (handled bool, set bool) {
+	switch kind {
+	case reflect.Interface:
+		if !ok || idx == len(arr) {
+			return true, false
+		}
+		v.Set(reflect.ValueOf(arr[idx]))
+		return true, true
+
+	case reflect.Ptr:
+		newVal := reflect.New(v.Type().Elem())
+		if set = d.setFieldByType(newVal.Elem(), namespace, idx); set {
+			v.Set(newVal)
+		}
+		return true, set
+
+	case reflect.String:
+		if !ok || idx == len(arr) {
+			return true, false
+		}
+		v.SetString(arr[idx])
+		return true, true
+	}
+	return false, false
+}
+
 func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx int) (set bool) {
 
 	var err error
@@ -578,43 +666,19 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 	ns := string(namespace)
 	arr, ok := d.values[ns]
 
-	if d.d.customTypeFuncs != nil {
-
-		if ok {
-			if cf, ok := d.d.customTypeFuncs[v.Type()]; ok {
-				val, err := cf(arr[idx:])
-				if err != nil {
-					d.setError(namespace, err)
-					return
-				}
-
-				v.Set(reflect.ValueOf(val))
-				set = true
-				return
-			}
+	// Try custom type function first
+	if ok {
+		if handled, customSet := d.tryCustomTypeFunc(v, arr, idx, namespace); handled {
+			return customSet
 		}
 	}
+
+	// Handle simple types (interface, pointer, string)
+	if handled, simpleSet := d.handleSimpleTypes(v, kind, arr, idx, namespace, ok); handled {
+		return simpleSet
+	}
+
 	switch kind {
-	case reflect.Interface:
-		if !ok || idx == len(arr) {
-			return
-		}
-		v.Set(reflect.ValueOf(arr[idx]))
-		set = true
-
-	case reflect.Ptr:
-		newVal := reflect.New(v.Type().Elem())
-		if set = d.setFieldByType(newVal.Elem(), namespace, idx); set {
-			v.Set(newVal)
-		}
-
-	case reflect.String:
-		if !ok || idx == len(arr) {
-			return
-		}
-		v.SetString(arr[idx])
-		set = true
-
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Float32, reflect.Float64, reflect.Bool:
@@ -627,35 +691,13 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		}
 
 	case reflect.Slice:
-		d.parseMapData()
-		if ok {
-			set = d.setSlice(v, arr, namespace, ns)
-		}
-		// maybe it's an numbered array i.e. Phone[0].Number
-		if rd := d.findAlias(ns); rd != nil {
-			if d.setSliceWithIndexes(v, rd, namespace) {
-				set = true
-			}
-		}
+		set = d.handleSliceField(v, arr, namespace, ns, ok)
 
 	case reflect.Array:
-		d.parseMapData()
-		if ok {
-			set = d.setArray(v, arr, namespace)
-		}
-		// maybe it's an numbered array i.e. Phone[0].Number
-		if rd := d.findAlias(ns); rd != nil {
-			if d.setArrayWithIndexes(v, rd, namespace) {
-				set = true
-			}
-		}
+		set = d.handleArrayField(v, arr, namespace, ns, ok)
 
 	case reflect.Map:
-		d.parseMapData()
-		// no natural map support so skip directly to dm lookup
-		if rd := d.findAlias(ns); rd != nil {
-			set = d.setMap(v, rd, namespace)
-		}
+		set = d.handleMapField(v, namespace, ns)
 
 	case reflect.Struct:
 		set = d.setStructField(v, v.Type(), arr, idx, namespace, ok)
