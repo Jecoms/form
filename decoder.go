@@ -39,6 +39,34 @@ func (d *decoder) findAlias(ns string) *recursiveData {
 	return nil
 }
 
+// getOrCreateRecursiveData gets existing or creates new recursiveData for an alias
+func (d *decoder) getOrCreateRecursiveData(alias string) *recursiveData {
+	if rd := d.findAlias(alias); rd != nil {
+		return rd
+	}
+
+	l := len(d.dm) + 1
+	var rd *recursiveData
+
+	if l > cap(d.dm) {
+		dm := make(dataMap, l)
+		copy(dm, d.dm)
+		rd = new(recursiveData)
+		dm[len(d.dm)] = rd
+		d.dm = dm
+	} else {
+		l = len(d.dm)
+		d.dm = d.dm[:l+1]
+		rd = d.dm[l]
+		rd.sliceLen = 0
+		rd.keys = rd.keys[0:0]
+	}
+
+	rd.alias = alias
+	d.aliasMap[rd.alias] = rd
+	return rd
+}
+
 func (d *decoder) parseMapData() {
 	// already parsed
 	if len(d.dm) > 0 {
@@ -58,7 +86,6 @@ func (d *decoder) parseMapData() {
 
 	var i int
 	var idx int
-	var l int
 	var insideBracket bool
 	var rd *recursiveData
 	var isNum bool
@@ -82,27 +109,7 @@ func (d *decoder) parseMapData() {
 					log.Panicf(errMissingStartBracket, k)
 				}
 
-				if rd = d.findAlias(k[:idx]); rd == nil {
-
-					l = len(d.dm) + 1
-
-					if l > cap(d.dm) {
-						dm := make(dataMap, l)
-						copy(dm, d.dm)
-						rd = new(recursiveData)
-						dm[len(d.dm)] = rd
-						d.dm = dm
-					} else {
-						l = len(d.dm)
-						d.dm = d.dm[:l+1]
-						rd = d.dm[l]
-						rd.sliceLen = 0
-						rd.keys = rd.keys[0:0]
-					}
-
-					rd.alias = k[:idx]
-					d.aliasMap[rd.alias] = rd
-				}
+				rd = d.getOrCreateRecursiveData(k[:idx])
 
 				// is map + key
 				ke := key{
