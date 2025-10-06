@@ -1936,3 +1936,139 @@ func TestDecoder_InvalidSliceIndex(t *testing.T) {
 	Equal(t, v2.PostIds[0], "1")
 	Equal(t, v2.PostIds[1], "2")
 }
+
+// TestNestedArrayPerformance verifies decoding performance for nested structures.
+//   - Uses more lenient thresholds when race detector is enabled, since it can slow down execution.
+func TestNestedArrayPerformance(t *testing.T) {
+	type NestedBar struct {
+		Bazs   []string          `form:"bazs"`
+		Lookup map[string]string `form:"lookup"`
+	}
+
+	type NestedFoo struct {
+		Bars []*NestedBar `form:"bars"`
+	}
+
+	type FormRequest struct {
+		Foos []*NestedFoo `form:"foos"`
+	}
+
+	decoder := NewDecoder()
+
+	var thresholdTests []struct {
+		numValues int
+		maxTime   time.Duration
+	}
+
+	if raceEnabled {
+		thresholdTests = []struct {
+			numValues int
+			maxTime   time.Duration
+		}{
+			{10, 50 * time.Millisecond},
+			{50, 500 * time.Millisecond},
+			{200, 5 * time.Second},
+		}
+	} else {
+		thresholdTests = []struct {
+			numValues int
+			maxTime   time.Duration
+		}{
+			{10, 10 * time.Millisecond},
+			{50, 50 * time.Millisecond},
+			{200, 500 * time.Millisecond},
+		}
+	}
+
+	for _, tt := range thresholdTests {
+		urlValues := make(url.Values)
+
+		for i := 0; i < tt.numValues; i++ {
+			urlValues.Add(fmt.Sprintf("foos[0].bars[%d].bazs", i), fmt.Sprintf("value%d", i))
+			urlValues.Add(fmt.Sprintf("foos[0].bars[%d].lookup[A]", i), fmt.Sprintf("lookupA%d", i))
+		}
+
+		var req FormRequest
+		start := time.Now()
+		err := decoder.Decode(&req, urlValues)
+		elapsed := time.Since(start)
+
+		if err != nil {
+			t.Errorf("Decode error for %d values: %v", tt.numValues, err)
+		}
+
+		if len(req.Foos) != 1 {
+			t.Errorf("Expected 1 Foo, got %d", len(req.Foos))
+		}
+		if len(req.Foos[0].Bars) != tt.numValues {
+			t.Errorf("Expected %d Bars, got %d", tt.numValues, len(req.Foos[0].Bars))
+		}
+
+		if elapsed > tt.maxTime {
+			t.Errorf("[race=%t] Decoding %d values took %v, expected less than %v",
+				raceEnabled, tt.numValues, elapsed, tt.maxTime)
+		}
+	}
+}
+
+func BenchmarkNestedArrayDecode100(b *testing.B) {
+	type NestedBar struct {
+		Bazs   []string          `form:"bazs"`
+		Lookup map[string]string `form:"lookup"`
+	}
+
+	type NestedFoo struct {
+		Bars []*NestedBar `form:"bars"`
+	}
+
+	type FormRequest struct {
+		Foos []*NestedFoo `form:"foos"`
+	}
+
+	decoder := NewDecoder()
+	urlValues := make(url.Values)
+
+	for i := 0; i < 100; i++ {
+		urlValues.Add(fmt.Sprintf("foos[0].bars[%d].bazs", i), fmt.Sprintf("value%d", i))
+		urlValues.Add(fmt.Sprintf("foos[0].bars[%d].lookup[A]", i), fmt.Sprintf("lookupA%d", i))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var req FormRequest
+		if err := decoder.Decode(&req, urlValues); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkNestedArrayDecode1000(b *testing.B) {
+	type NestedBar struct {
+		Bazs   []string          `form:"bazs"`
+		Lookup map[string]string `form:"lookup"`
+	}
+
+	type NestedFoo struct {
+		Bars []*NestedBar `form:"bars"`
+	}
+
+	type FormRequest struct {
+		Foos []*NestedFoo `form:"foos"`
+	}
+
+	decoder := NewDecoder()
+	urlValues := make(url.Values)
+
+	for i := 0; i < 1000; i++ {
+		urlValues.Add(fmt.Sprintf("foos[0].bars[%d].bazs", i), fmt.Sprintf("value%d", i))
+		urlValues.Add(fmt.Sprintf("foos[0].bars[%d].lookup[A]", i), fmt.Sprintf("lookupA%d", i))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var req FormRequest
+		if err := decoder.Decode(&req, urlValues); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
